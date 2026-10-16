@@ -1,6 +1,9 @@
 Team Name: Kernel Turtles
 Group Member Names: Sofia Amador, Zack Govin, Chandler Radcliffe, Larry OConnor, Lauren Sanchez
 
+**************************************
+MILESTONE 1
+**************************************
 --- Proposed Class/Module Design ---
 
 --- Proposed Workload Representation ---
@@ -14,3 +17,47 @@ Group Member Names: Sofia Amador, Zack Govin, Chandler Radcliffe, Larry OConnor,
 --- Initial Explaining of Relevant Operating-System Concepts ---
 
 --- Planned Division of Responsibilities ---
+
+*************************************
+Main Notebook
+*************************************
+--- Meeting Notes ---
+
+--- Design Decisions ---
+
+--- Thread-Partitioning Sketches ---
+
+--- Shared-Data Diagrams ---
+
+--- Synchronization Diagrams ---
+
+--- Pseudocode For Each Workload ---
+
+--- Pseudocode For Each Scheduling Strategy ---
+
+--- Race-Condition Observations ---
+
+--- Bugs Encountered ---
+
+--- Fixes Attempted ---
+
+--- Failed Test Cases ---
+
+--- Successful Test Cases ---
+
+--- Timing Results ---
+
+--- Timing Anomalies ---
+
+--- Notes From Each Milestone ---
+
+--- Individual Contribution Notes ---
+* Sofia Amador:
+
+* Zack Govin:
+
+* Chandler Radcliffe:
+
+* Larry OConnor:
+
+* Lauren Sanchez:
