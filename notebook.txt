@@ -1,1 +1,16 @@
+Team Name: Kernel Turtles
+Group Member Names: Sofia Amador, Zack Govin, Chandler Radcliffe, Larry OConnor, Lauren Sanchez
 
+--- Proposed Class/Module Design ---
+
+--- Proposed Workload Representation ---
+
+--- Proposed Thread and Rank Partitioning Strategies---
+
+--- Proposed Validation Strategy ---
+
+--- Proposed Timing Methodology ---
+
+--- Initial Explaining of Relevant Operating-System Concepts ---
+
+--- Planned Division of Responsibilities ---
