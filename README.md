@@ -1,1 +1,1 @@
-# 4-Model-Paralell-Processing-Workbench
+# 4-Model-Parallel-Processing-Workbench
