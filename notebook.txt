@@ -1,14 +1,164 @@
 Team Name: Kernel Turtles
-Group Member Names: Sofia Amador, Zack Govin, Chandler Radcliffe, Larry OConnor, Lauren Sanchez
+Group Member Names: Sofia Amador, Zack Govin, Chandler Radcliffe, Larry OConnor,
+                    Lauren Sanchez
 
 **************************************
 MILESTONE 1
 **************************************
 --- Proposed Class/Module Design ---
-
++----------------------+---------------------------+---------------------------+
+| Module               | Responsibility            | Key interface             |
++======================+===========================+===========================+
+| Config               | Parse and validate stdin; | bool parse(std::istream&, |
+|                      |                           | Config&); enums stored as |
+|                      |                           | ints                      |
++----------------------+---------------------------+---------------------------+
+| Workload,            | Generate data from global | setup(n, seed), Partial   |
+| LoopWorkload,        | index;                    | runRange(lo, hi),         |
+| DotProductWorkload,  |                           | combine(Partial, Partial) |
+| MonteCarloPiWorkload |                           |                           |
++----------------------+---------------------------+---------------------------+
+| WorkScheduler        | Turn (n, workers,         | staticRange(w),           |
+|                      | schedule, chunk) into the | cyclicChunks(w), chunk(k) |
+|                      | ranges a given worker     |                           |
+|                      | owns                      |                           |
++----------------------+---------------------------+---------------------------+
+| SequentialExecutor   | One call: runRange(0, n)  | --                        |
++----------------------+---------------------------+---------------------------+
+| StdThreadExecutor    | Create/join std::thread   | Result run(Workload&,     |
+|                      | workers, per-thread       | Config&)                  |
+|                      | partials, atomic chunk    |                           |
+|                      | counter for dynamic       |                           |
++----------------------+---------------------------+---------------------------+
+| OpenMPExecutor       | parallel for with         | same                      |
+|                      | reduction and the chosen  |                           |
+|                      | schedule clause           |                           |
++----------------------+---------------------------+---------------------------+
+| MPIExecutor          | Broadcast config,         | same, plus rank and size  |
+|                      | rank-level static/cyclic, |                           |
+|                      | manager-worker dynamic,   |                           |
+|                      | MPI_Reduce                |                           |
++----------------------+---------------------------+---------------------------+
+| SyncUtils            | Mutex/atomic helpers,     | struct alignas(64)        |
+|                      | padded per-thread slots   | PaddedPartial             |
+|                      | to avoid false sharing    |                           |
++----------------------+---------------------------+---------------------------+
+| ResultValidator      | One comparison routine    | bool validate(workload,   |
+|                      | for every model against   | result, reference)        |
+|                      | the sequential result     |                           |
++----------------------+---------------------------+---------------------------+
+| Timer                | Monotonic timing,         | std::chrono::steady_clock |
+|                      | repetitions,              |                           |
+|                      | avg/best/worst            |                           |
++----------------------+---------------------------+---------------------------+
+| TraceLog             | Thread-safe event log     | log(event, id, a, b)      |
+|                      | printed after the run     |                           |
++----------------------+---------------------------+---------------------------+
+| OutputFormatter      | Single-run report,        | --                        |
+|                      | COMPARE table, STATUS     |                           |
+|                      | lines                     |                           |
++----------------------+---------------------------+---------------------------+
+| ExperimentRunner     | COMPARE mode and the      | --                        |
+|                      | empirical-study sweeps    |                           |
+|                      |                           |                           |
++----------------------+---------------------------+---------------------------+
+| main                 | MPI init/finalize, rank-0 | --                        |
+|                      | input, mode dispatch,     |                           |
+|                      | error paths               |                           |
++----------------------+---------------------------+---------------------------+
 --- Proposed Workload Representation ---
+Every input value is a pure function of its global index, so any thread or rank
+can produce exactly the data it needs without copying arrays around, and all
+four models see identical inputs.
++----------+-----------------+---------------+------------+--------------------+
+| Workload | Data per index  | Partial       | Combine    | Why it's safe      |
+|          | i               | result        |            |                    |
++==========+=================+===============+============+====================+
+| LOOP     | data[i] = (i*i  | checksum =    | unsigned   | Unsigned           |
+|          | + 3*i + 7) % M, | SUM           | add        | wraparound is      |
+|          | all uint64_t (i | data[i]*(i+1) |            | defined behavior   |
+|          | < 2^32 keeps    | mod 2^64      |            | and modular        |
+|          | i*i in range)   |               |            | addition is        |
+|          |                 |               |            | order-independent, |
+|          |                 |               |            | so the checksum is |
+|          |                 |               |            | identical under    |
+|          |                 |               |            | any schedule. The  |
+|          |                 |               |            | (i+1) weight       |
+|          |                 |               |            | catches values     |
+|          |                 |               |            | written to the     |
+|          |                 |               |            | wrong index.       |
++----------+-----------------+---------------+------------+--------------------+
+| DOT      | a[i], b[i] as   | SUM a[i]*b[i] | double add | Arrays are filled  |
+|          | double from     | over the      |            | in untimed setup.  |
+|          | small formulas  | range         |            | Different          |
+|          | of i,           |               |            | summation orders   |
+|          |                 |               |            | give slightly      |
+|          |                 |               |            | different doubles, |
+|          |                 |               |            | so validation uses |
+|          |                 |               |            | a relative         |
+|          |                 |               |            | tolerance.         |
++----------+-----------------+---------------+------------+--------------------+
+| PI       | Point i: x =    | count of      | integer    | No generator state |
+|          | U(seed, 2i), y  | points with   | add        | exists to share,   |
+|          | = U(seed,       | x^2 + y^2 <=  |            | and point i is the |
+|          | 2i+1), U =      | 1 (uint64_t)  |            | same no matter     |
+|          | splitmix64 hash |               |            | Owhich thread or   |
+|          | scaled to [0,   |               |            | rank draws it.     |
+|          | 1)              |               |            |                    |
++----------+-----------------+---------------+------------+--------------------+
 
 --- Proposed Thread and Rank Partitioning Strategies---
+One set of definitions, applied by WorkScheduler, governs all three parallel
+models.
++----------+----------------+--------------+---------------------+-------------+
+| Strategy | Definition     | std::thread  | OpenMP              | MPI         |
++==========+================+==============+=====================+=============+
+| STATIC   | Worker w gets  | Each thread  | schedule(static),   | Each rank   |
+|          | one contiguous | computes its | no chunk argument   | computes    |
+|          | block          | own block    |                     | its block;  |
+|          |                | from its id  |                     | W = p       |
+|          |                |              |                     |             |
+|          |                |              |                     |             |
+|          |                |              |                     |             |
++----------+----------------+--------------+---------------------+-------------+
+| CYCLIC   | Worker w gets  | Loop over    | schedule(static,c)  | Same        |
+|          | chunks w, w+W, | owned chunk  |                     | round-robin |
+|          | w+2W, ...      | indices      |                     | over ranks  |
++----------+----------------+--------------+---------------------+-------------+
+| DYNAMIC  | Next free      | Shared       | schedule(dynamic,c) | Rank 0 is   |
+|          | chunk handed   | atomic       |                     | manager     |
+|          | out at run     | counter next |                     | only; ranks |
+|          | time           | (std::atomic |                     | 1..p-1      |
+|          |                | of           |                     | request     |
+|          |                | uint64_t);   |                     | chunks; W = |
+|          |                | each thread  |                     | p - 1       |
+|          |                | does         |                     |             |
+|          |                | fetch_add(1) |                     |             |
+|          |                | until past   |                     |             |
+|          |                | the last     |                     |             |
+|          |                | chunk        |                     |             |
++----------+----------------+--------------+---------------------+-------------+
+Per-worker results: std::thread workers write into their own alignas(64) slot in
+a vector, and the main thread sums the slots after join(). This avoids per-
+iteration locking and false sharing. OpenMP uses reduction(+:var). MPI ranks
+keep a local partial and finish with MPI_Reduce to rank 0.
+MPI dynamic protocol:
+  1. Each worker sends TAG_REQUEST to rank 0.
+  2. Rank 0 replies TAG_WORK with the next chunk index, or TAG_STOP once chunks
+     run out.
+  3. A worker computes the chunk, adds it to its local partial, and requests
+     again.
+  4. After every worker has received STOP, all ranks call MPI_Reduce; rank 0
+     contributes zero.
+If there are fewer chunks than workers, the extra workers get STOP on their
+first request and contribute zero. Dynamic MPI and COMPARE both reject p < 2
+with STATUS: INVALID_INPUT.
+Configuration broadcast: rank 0 reads stdin, validates, and broadcasts the
+Config struct plus a status code with MPI_Bcast. Every rank checks the status
+and PROCESSES == size, so all ranks take the same error path and reach
+MPI_Finalize together. MPI is started with MPI_Init_thread(MPI_THREAD_FUNNELED)
+and the provided level is checked.
+
 
 --- Proposed Validation Strategy ---
 
