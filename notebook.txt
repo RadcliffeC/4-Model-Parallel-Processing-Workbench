@@ -91,7 +91,7 @@ four models see identical inputs.
 | DOT      | a[i], b[i] as   | SUM a[i]*b[i] | double add | Arrays are filled  |
 |          | double from     | over the      |            | in untimed setup.  |
 |          | small formulas  | range         |            | Different          |
-|          | of i,           |               |            | summation orders   |
+|          | of i            |               |            | summation orders   |
 |          |                 |               |            | give slightly      |
 |          |                 |               |            | different doubles, |
 |          |                 |               |            | so validation uses |
@@ -158,21 +158,129 @@ Config struct plus a status code with MPI_Bcast. Every rank checks the status
 and PROCESSES == size, so all ranks take the same error path and reach
 MPI_Finalize together. MPI is started with MPI_Init_thread(MPI_THREAD_FUNNELED)
 and the provided level is checked.
-
-
 --- Proposed Validation Strategy ---
-
++----------+------------------------------+------------------------------------+
+| Workload | Check against sequential     | Extra checks                       |
++==========+==============================+====================================+
+| LOOP     | Checksum equal, exactly      | Same checksum across 1, 2, 4, 8    |
+|          |                              | workers and all three schedules    |
++----------+------------------------------+------------------------------------+
+| DOT      | Relative error within 1e-9:  | Small-n case with a hand-computed  |
+|          | abs(x - ref) <= 1e-9 *       | answer                             |
+|          | max(1.0, abs(ref))           |                                    |
++----------+------------------------------+------------------------------------+
+| PI       | Inside-count equal           | Estimate within a few standard     |
+|          |                              | errors of pi                       |
++----------+------------------------------+------------------------------------+
+Coverage tracking: in debug and test builds, each worker also counts how many
+indices it processed. The sum must equal n, which catches off-by-one errors in
+the static, cyclic and dynamic range math.
+Test folder: each case stores its input file, the expected STATUS, the expected
+checksum or validation outcome, and one sentence saying what it verifies.
+Minimums: 3 small + 3 large LOOP, 3 small + 3 large DOT, 3 PI, 3 invalid input,
+3 worker-count edge cases, every schedule in every model, one trace test per
+model, the race demo, and one team-config test.
 --- Proposed Timing Methodology ---
-
+Only the parallel work is timed, using std::chrono::steady_clock (monotonic),
+over REPETITIONS runs; average, best and worst are reported in milliseconds.
++--------------------------------------+---------------------------------------+
+| Inside the timed region              | Outside the timed region              |
++======================================+=======================================+
+| Thread creation and join, OpenMP     | Input parsing and the config          |
+| region start-up                      | broadcast                             |
++--------------------------------------+---------------------------------------+
+| Scheduling, atomic counter traffic,  | DOT array generation                  |
+| synchronization                      |                                       |
++--------------------------------------+---------------------------------------+
+| MPI chunk messages and the final     | MPI_Init_thread / MPI_Finalize        |
+| MPI_Reduce                           |                                       |
++--------------------------------------+---------------------------------------+
+| LOOP array fill and PI point         | All printing, including trace output  |
+| generation                           |                                       |
++--------------------------------------+---------------------------------------+
+COMPARE: rank 0 runs and times sequential, std::thread and OpenMP while ranks
+1..p-1 wait at a barrier, then all ranks run the MPI version.
+Speedup = sequential average / parallel average.
+Efficiency = speedup / active workers: t for threads, the actual OpenMP team
+size from omp_get_num_threads(), p for static/cyclic MPI, p - 1 for dynamic
+MPI.
+Fairness: no oversubscription in the main comparison, same machine for every
+run, trace mode never timed.
 --- Initial Explaining of Relevant Operating-System Concepts ---
-
+The three shared-memory models run inside one process, so the OS sees one
+address space with several schedulable threads. MPI runs separate processes, so
+the OS sees isolated address spaces that can only exchange data through the MPI
+library.
+ 
+- Process vs. thread: A process owns an address space, open files and other
+  resources. A thread is an execution context inside a process. Linux schedules
+  threads, so every std::thread and OpenMP thread is a separately schedulable
+  task.
+- Shared vs. private data: threads share the heap and globals. Each thread's
+  stack is private. The design keeps the hot accumulator private and touches
+  shared data only once at the end.
+- Creation and joining: std::thread asks the kernel for a new thread. join()
+  blocks the main thread until a worker finishes, which also guarantees its
+  writes are visible. OpenMP does the same internally, usually reusing a
+  thread pool across regions.
+- Race conditions: sum += a[i]*b[i] is a read-modify-write. Two threads can read
+  the same old value and one update is lost. Ways to fix this include a mutex,
+  an atomic, or private partial sums with one final reduction.
+- Locking cost: a mutex taken on every iteration turns parallel work into serial
+  work plus lock overhead, and contended locks may put threads to sleep in the
+  kernel. Reductions synchronize once per worker, not once per element.
+- False sharing: two threads writing neighboring values in the same 64-byte
+  cache line force that line to bounce between cores. Padding each partial to
+  its own line prevents it.
+- Scheduling and load balance: the OS decides which runnable thread runs on
+  which core and can preempt or migrate it. Job time equals the slowest worker's
+  time, so uneven work hurts. Dynamic scheduling adapts at the cost of more
+  coordination.
+- Why more workers can be slower: thread/process start-up, more threads than
+  cores, and memory bandwidth limits all cap speedup. Small inputs make the
+  overhead dominate.
+- MPI: ranks are numbered processes in a communicator. They share no ordinary
+  variables, so data moves only through point-to-point messages or collectives.
+  A wrong message is a protocol bug, not a data race.
+- Amdahl's Law: if a fraction s of the run is serial, speedup on N workers is at
+  most 1 / (s + (1 - s)/N), so even s = 5% caps speedup at 20x. Serial parts
+  include setup, thread creation and the final reduction.
+- Timing variability: other processes, OS scheduling decisions, CPU frequency
+  changes and cache state differ run to run, which is why runs are repeated and
+  best, worst and average are reported.
 --- Planned Division of Responsibilities ---
-
++-----------------+---------------------------+-----------------------+--------+
+| Role            | Owns                      | Also writes           | Owner  |
++=================+===========================+=======================+========+
+| Core and I/O    | Config parser, input      | README sections on    | Sofia  |
+|                 | validation, main control, | input/output, build,  | Amador |
+|                 | OutputFormatter, build    | launch                |        |
+|                 | commands                  |                       |        |
++-----------------+---------------------------+-----------------------+--------+
+| Workloads and   | Workload classes,         | Design-doc workload   | Zack   |
+| validation      | splitmix64 RNG, checksum, | and validation        | Govin  |
+|                 | sequential executor,      | sections              |        |
+|                 | ResultValidator, test     |                       |        |
+|                 | folder                    |                       |        |
++-----------------+---------------------------+-----------------------+--------+
+| std::thread and | StdThreadExecutor,        | Report sections on    |Chandler|
+| synchronization | WorkScheduler, SyncUtils, | races, mutexes,       |Radcliffe
+|                 | race-condition demo and   | shared vs. private    |        |
+|                 | its fix                   | data                  |        |
++-----------------+---------------------------+-----------------------+--------+
+| OpenMP, timing  | OpenMPExecutor, Timer,    | Trace-mode            | Larry  |
+| and trace       | TraceLog                  | documentation, timing | OConnor|
+|                 |                           | methodology           |        |
++-----------------+---------------------------+-----------------------+--------+
+| MPI and         | MPIExecutor               | Report sections on    | Lauren |
+| experiments     | ExperimentRunner,         | MPI, empirical study, | Sanchez|
+|                 | graphing script           | Amdahl's Law          |        |
++-----------------+---------------------------+-----------------------+--------+
 *************************************
 Main Notebook
 *************************************
 --- Meeting Notes ---
-
+-10/21/2026: Met and drafted Milestone 1
 --- Design Decisions ---
 
 --- Thread-Partitioning Sketches ---
