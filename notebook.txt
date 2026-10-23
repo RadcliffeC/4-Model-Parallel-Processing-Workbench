@@ -102,7 +102,7 @@ four models see identical inputs.
 |          | U(seed, 2i), y  | points with   | add        | exists to share,   |
 |          | = U(seed,       | x^2 + y^2 <=  |            | and point i is the |
 |          | 2i+1), U =      | 1 (uint64_t)  |            | same no matter     |
-|          | splitmix64 hash |               |            | Owhich thread or   |
+|          | splitmix64 hash |               |            | which thread or   |
 |          | scaled to [0,   |               |            | rank draws it.     |
 |          | 1)              |               |            |                    |
 +----------+-----------------+---------------+------------+--------------------+
@@ -206,7 +206,7 @@ size from omp_get_num_threads(), p for static/cyclic MPI, p - 1 for dynamic
 MPI.
 Fairness: no oversubscription in the main comparison, same machine for every
 run, trace mode never timed.
---- Initial Explaining of Relevant Operating-System Concepts ---
+--- Initial Explanation of Relevant Operating-System Concepts ---
 The three shared-memory models run inside one process, so the OS sees one
 address space with several schedulable threads. MPI runs separate processes, so
 the OS sees isolated address spaces that can only exchange data through the MPI
