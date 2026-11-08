@@ -1,7 +1,9 @@
 //
 // Created by Chandler Radcliffe on 11/5/26.
+// modified Sofia 11/7/2026
 //
 #include "input.h"
+#include <stdexcept>
 
 // Conversions from string to enums
 bool parse_workload(const string& s, WORKLOAD& w) {
@@ -76,19 +78,20 @@ string schedule_to_string(SCHEDULE s) {
     return "UNKNOWN";
 }
 
-// Helper to read next field value, optionally skipping the label if present
+// Helper to read next field value, label required
 static bool read_field_token(istream& is, const string& label, string& val, string& err) {
     string tok;
     if (!(is >> tok)) {
         err = "Unexpected end of input while expecting " + label;
         return false;
     }
-    // If token matches field label (with optional colon), read the actual value
-    if (tok == label || tok == label + ":") {
-        if (!(is >> tok)) {
-            err = "Missing value after " + label;
-            return false;
-        }
+    if(tok != label){
+        err = "Expected " + label + " but found '" + tok + "'";
+        return false;
+    }
+    if (!(is >> tok)) {
+        err = "Missing value after " + label;
+        return false;
     }
     val = tok;
     return true;
@@ -125,12 +128,20 @@ bool validate_config(const input& in, string& err) {
         err = "Invalid SIZE " + to_string(in.size) + ". Must be a positive integer.";
         return false;
     }
+    if (in.size > MAX_SIZE) {
+        err = "Invalid SIZE " + to_string(in.size) + ". Must be <= " + to_string(MAX_SIZE) + ".";
+        return false;
+    }
 
     // 5. Threads validation
     if (in.mode == STD_THREAD || in.mode == OPENMP || in.mode == COMPARE ||
         (in.mode == TRACE && (in.model == MODEL_STD_THREAD || in.model == MODEL_OPENMP))) {
         if (in.threads <= 0) {
             err = "Invalid THREADS " + to_string(in.threads) + ". Must be at least 1.";
+            return false;
+        }
+        if (in.threads > MAX_THREADS) {
+            err = "Invalid THREADS " + to_string(in.threads) + ". Must be <= " + to_string(MAX_THREADS) + ".";
             return false;
         }
     }
@@ -161,6 +172,12 @@ bool validate_config(const input& in, string& err) {
             return false;
         }
     }
+    //upper limit for any MPI mode
+    if(is_mpi_active && in.processes > MAX_PROCESSES){
+        err = "Invalid PROCESSES " + to_string(in.processes) + ". Must be <= " + to_string(MAX_PROCESSES) + ".";
+        return false;
+    }
+
 
     // 8. Chunk validation
     // c is a positive chunk size for cyclic or dynamic scheduling. CHUNK is ignored for static scheduling.
@@ -174,6 +191,10 @@ bool validate_config(const input& in, string& err) {
     // 9. Repetitions validation
     if (in.repetitions <= 0) {
         err = "Invalid REPETITIONS " + to_string(in.repetitions) + ". Must be at least 1.";
+        return false;
+    }
+    if (in.repetitions > MAX_REPETITIONS) {
+        err = "Invalid REPETITIONS " + to_string(in.repetitions) + ". Must be <= " + to_string(MAX_REPETITIONS) + ".";
         return false;
     }
 
@@ -200,7 +221,7 @@ bool validate_mpi_comm_size(const input& in, int actual_comm_size, string& err) 
  */
 bool parse_input(istream& is, input& in, string& err) {
     // 1. WORKLOAD
-    cout << "WORKLOAD ";
+    //cout << "WORKLOAD ";
     if (!read_field_token(is, "WORKLOAD", in.workload_str, err)) return false;
     if (!parse_workload(in.workload_str, in.workload)) {
         err = "Unknown WORKLOAD: '" + in.workload_str + "'. Expected LOOP, DOT, or PI.";
@@ -208,7 +229,7 @@ bool parse_input(istream& is, input& in, string& err) {
     }
 
     // 2. MODE
-    cout << "MODE ";
+    //cout << "MODE ";
     if (!read_field_token(is, "MODE", in.mode_str, err)) return false;
     if (!parse_mode(in.mode_str, in.mode)) {
         err = "Unknown MODE: '" + in.mode_str + "'. Expected SEQUENTIAL, STD_THREAD, OPENMP, MPI, COMPARE, or TRACE.";
@@ -217,7 +238,7 @@ bool parse_input(istream& is, input& in, string& err) {
 
     // 3. MODEL (only when MODE is TRACE)
     if (in.mode == TRACE) {
-        cout << "MODEL ";
+        //cout << "MODEL ";
         if (!read_field_token(is, "MODEL", in.model_str, err)) return false;
         if (!parse_model(in.model_str, in.model)) {
             err = "Unknown MODEL: '" + in.model_str + "'. Expected STD_THREAD, OPENMP, or MPI.";
@@ -230,10 +251,12 @@ bool parse_input(istream& is, input& in, string& err) {
 
     // 4. SIZE
     string size_str;
-    cout << "SIZE ";
+    //cout << "SIZE ";
     if (!read_field_token(is, "SIZE", size_str, err)) return false;
     try {
-        in.size = stoll(size_str);
+        size_t pos = 0;
+        in.size = stoll(size_str, &pos);
+        if(pos != size_str.size()) throw invalid_argument("extra characters");
     } catch (...) {
         err = "Invalid numeric format for SIZE: '" + size_str + "'";
         return false;
@@ -241,28 +264,32 @@ bool parse_input(istream& is, input& in, string& err) {
 
     // 5. THREADS
     string threads_str;
-    cout << "THREADS ";
+    //cout << "THREADS ";
     if (!read_field_token(is, "THREADS", threads_str, err)) return false;
     try {
-        in.threads = stoi(threads_str);
+        size_t pos = 0;
+        in.threads = stoi(threads_str, &pos);
+        if(pos != threads_str.size()) throw invalid_argument("extra characters");
     } catch (...) {
         err = "Invalid numeric format for THREADS: '" + threads_str + "'";
         return false;
     }
 
     // 6. PROCESSES
+    //cout << "PROCESSES ";
     string processes_str;
-    cout << "PROCESSES ";
     if (!read_field_token(is, "PROCESSES", processes_str, err)) return false;
     try {
-        in.processes = stoi(processes_str);
+        size_t pos = 0;
+        in.processes = stoi(processes_str, &pos);
+        if(pos != processes_str.size()) throw invalid_argument("extra characters");
     } catch (...) {
         err = "Invalid numeric format for PROCESSES: '" + processes_str + "'";
         return false;
     }
 
     // 7. SCHEDULE
-    cout << "SCHEDULE ";
+    //cout << "SCHEDULE ";
     if (!read_field_token(is, "SCHEDULE", in.schedule_str, err)) return false;
     if (!parse_schedule(in.schedule_str, in.schedule)) {
         err = "Unknown SCHEDULE: '" + in.schedule_str + "'. Expected STATIC, CYCLIC, or DYNAMIC.";
@@ -270,11 +297,13 @@ bool parse_input(istream& is, input& in, string& err) {
     }
 
     // 8. CHUNK
-    cout << "CHUNK ";
+    //cout << "CHUNK ";
     string chunk_str;
     if (!read_field_token(is, "CHUNK", chunk_str, err)) return false;
     try {
-        in.chunk = stoi(chunk_str);
+        size_t pos = 0;
+        in.chunk = stoi(chunk_str, &pos);
+        if(pos != chunk_str.size()) throw invalid_argument("extra characters");
     } catch (...) {
         err = "Invalid numeric format for CHUNK: '" + chunk_str + "'";
         return false;
@@ -282,10 +311,13 @@ bool parse_input(istream& is, input& in, string& err) {
 
     // 9. SEED
     string seed_str;
-    cout << "SEED ";
+    //cout << "SEED ";
     if (!read_field_token(is, "SEED", seed_str, err)) return false;
     try {
-        in.seed = stoull(seed_str);
+        if (seed_str[0] == '-') throw invalid_argument("negative seed");
+        size_t pos = 0;
+        in.seed = stoull(seed_str, &pos);
+        if (pos != seed_str.size()) throw invalid_argument("extra characters");
     } catch (...) {
         err = "Invalid numeric format for SEED: '" + seed_str + "'";
         return false;
@@ -293,12 +325,20 @@ bool parse_input(istream& is, input& in, string& err) {
 
     // 10. REPETITIONS
     string repetitions_str;
-    cout << "REPETITIONS ";
+    //cout << "REPETITIONS ";
     if (!read_field_token(is, "REPETITIONS", repetitions_str, err)) return false;
     try {
-        in.repetitions = stoi(repetitions_str);
+        size_t pos = 0;
+        in.repetitions = stoi(repetitions_str, &pos);
+        if (pos != repetitions_str.size()) throw invalid_argument("extra characters");
     } catch (...) {
         err = "Invalid numeric format for REPETITIONS: '" + repetitions_str + "'";
+        return false;
+    }
+
+    string excess;
+    if(is >> excess){
+        err = "Unexpected extra input after REPETITIONS: '" + excess + "'";
         return false;
     }
 

@@ -1,5 +1,6 @@
 //
 // Created by Chandler Radcliffe on 11/5/26.
+// modified by Sofia 11/7/26.
 //
 
 #ifndef INC_4_MODEL_PARALLEL_PROCESSING_WORKBENCH_INPUT_H
@@ -24,6 +25,14 @@ enum SCHEDULE { STATIC, CYCLIC, DYNAMIC };
 enum MODE { SEQUENTIAL, STD_THREAD, OPENMP, MPI, COMPARE, TRACE };
 enum WORKLOAD { LOOP, DOT, PI };
 enum MODEL { MODEL_NONE, MODEL_STD_THREAD, MODEL_OPENMP, MODEL_MPI };
+
+//arbitary nums can change, not specified in spec yet
+//acceptable limit max values from input file
+//MAX_SIZE(n)
+const long long MAX_SIZE = 1000000000LL;    //should be between 10^7 and 10^9, overflow
+const int MAX_THREADS = 256;
+const int MAX_PROCESSES = 256;
+const int MAX_REPETITIONS = 256;
 
 /*
  * struct to parse input
@@ -60,9 +69,7 @@ string mode_to_string(MODE m);
 string model_to_string(MODEL m);
 string schedule_to_string(SCHEDULE sch);
 
-static bool read_field_token(istream& is, const string& label, string& val, string& err);
 bool validate_config(const input& in, string& err);
-
 bool validate_mpi_comm_size(const input& in, int actual_comm_size, string& err);
 bool parse_input(istream& is, input& in, string& err);
 void print_config(const input& in);
