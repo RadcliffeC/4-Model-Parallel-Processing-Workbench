@@ -3,8 +3,9 @@
 //
 
 #include <iostream>
-#include "Seq-Thread-OMP/workbench.h"
-#include "Seq-Thread-OMP/workload.h"
+
+#include "workbench.h"
+#include "workload.h"
 
 using namespace std;
 

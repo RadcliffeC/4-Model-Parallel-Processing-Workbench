@@ -23,12 +23,11 @@ endif()
 find_package(OpenMP REQUIRED)
 find_package(Threads REQUIRED)
 
-include_directories(Seq-Thread-OMP)
+include_directories(Seq-Thread-OMP OpenMP Utils)
 
-add_executable(4_Model_Parallel_Processing_Workbench
+set(CORE_SOURCES
         Seq-Thread-OMP/input.cpp
         Seq-Thread-OMP/input.h
-        Seq-Thread-OMP/main.cpp
         Seq-Thread-OMP/output.cpp
         Seq-Thread-OMP/output.h
         Seq-Thread-OMP/workbench.h
@@ -36,8 +35,14 @@ add_executable(4_Model_Parallel_Processing_Workbench
         Seq-Thread-OMP/workload.h
         OpenMP/openMPExecutor.cpp
         Utils/timer.cpp
-        tests/openmp_test.cpp
-        tests/timer_test.cpp
-        )
-target_link_libraries(4_Model_Parallel_Processing_Workbench PRIVATE OpenMP:OpenMP_CXX Threads::Threads)
+)
+
+add_executable(4_Model_Parallel_Processing_Workbench Seq-Thread-OMP/main.cpp ${CORE_SOURCES})
+target_link_libraries(4_Model_Parallel_Processing_Workbench PRIVATE OpenMP::OpenMP_CXX Threads::Threads)
 target_compile_options(4_Model_Parallel_Processing_Workbench PRIVATE -Wall -Wextra)
+
+add_executable(openmp_test tests/openmp_test.cpp ${CORE_SOURCES})
+target_link_libraries(openmp_test PRIVATE OpenMP::OpenMP_CXX Threads::Threads)
+
+add_executable(timer_test tests/timer_test.cpp ${CORE_SOURCES})
+target_link_libraries(timer_test PRIVATE OpenMP::OpenMP_CXX Threads::Threads)

@@ -1,4 +1,4 @@
-#include "Seq-Thread-OMP/workbench.h"
+#include "workbench.h"
 #include <chrono>
 #include <algorithm>
 #include <numeric>

@@ -4,6 +4,7 @@
 #include <vector>
 #include <thread>
 #include "input.h"
+#include <atomic>
 
 using namespace std;
 

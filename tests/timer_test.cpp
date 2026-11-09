@@ -2,7 +2,7 @@
 #include <vector>
 #include <thread>
 #include <chrono>
-#include "Seq-Thread-OMP/workbench.h"
+#include "workbench.h"
 
 using namespace std;
 
