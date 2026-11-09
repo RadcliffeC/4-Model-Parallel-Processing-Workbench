@@ -118,7 +118,9 @@ WorkloadResult run_sequential(const input& cfg, WorkloadData& data) {
     if (cfg.workload == LOOP) {
         res.checksum = loop_range(data.loop_out, 0, n);
     } else if (cfg.workload == DOT) {
-        res.value = dot_range(data.a, data.b, 0, n); // inside count
+        res.value = dot_range(data.a, data.b, 0, n);
+    } else { // PI
+        res.checksum = pi_range(cfg.seed, 0, n); // inside count
         res.value = pi_estimate(res.checksum, n);
     }
     return res;
