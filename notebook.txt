@@ -282,6 +282,36 @@ Main Notebook
 --- Meeting Notes ---
 -10/21/2026: Met and drafted Milestone 1
 --- Design Decisions ---
+11/08/2026:
+- LOOP stores its output. setup_workload allocates data.loop_out inside
+  WorkloadData, which main owns and which outlives every run. A worker writes
+  only loop_out[lo..hi) for its own ranges, and the checksum is computed from
+  the values it wrote. MPI ranks will use rank-local storage.
+- LOOP numbers: M = 1000003. data[i] = (i*i + 3i + 7). mod M is computed
+  EXACTLY by reducing r = i mod M first. r*r + 3r + 7 < 2^41, so nothing wraps.
+  For this M the value is never 0, so a 0 left in the array means
+  "never written". Accepted SIZE: 1..10^9.
+- LOOP checksum = sum of data[i]*(i+1), mod 2^64. Each term is < 2^50 and never
+  wraps. Only the running sum wraps, which is defined for unsigned types and
+  gives the same answer in any order. It is error detection, not proof, so
+  validate_loop_array also checks every element directly.
+- DOT inputs: a[i] = ((i mod 1000)+1)/1000 in [0.001, 1], b[i] = 1/((i mod
+  100)+1) in [0.01, 1]. Filled once in untimed setup, then shared read-only by
+  all threads in the process. Since both are functions of i, an MPI worker can
+  rebuild any chunk's values itself
+- DOT tolerance: relative 1e-6. All terms are positive, so summing n terms in
+  any order is off by at most ~n * 2^-53. two orders differ by at most ~2.2e-7.
+  NaN/inf results are rejected.
+- PI: U(seed, k) = k-th output of SplitMix64 started at seed, computed directly
+  from k. Point i uses k = 2i and 2i+1. Correctness = EXACT inside count match
+  with sequential. Distance from real pi is reported only, never a pass/fail
+  test.
+- Interface contract: ranges are half-open [lo, hi). An empty range returns the
+  identity (0 / 0.0). Partials combine by addition. OpenMP uses scalar reduction
+  variables.
+- validate_result is ONE function for every model.
+- Partition coverage: processed == n can hide a duplicate plus an omission, so
+  validate_visit_counts() requires every index visited exactly once.
 
 --- Thread-Partitioning Sketches ---
 
@@ -290,6 +320,29 @@ Main Notebook
 --- Synchronization Diagrams ---
 
 --- Pseudocode For Each Workload ---
+11/08/2026:
+setup(n):   LOOP: out = n zeros
+            DOT:  for i in [0,n): a[i] = dot_a(i); b[i] = dot_b(i)
+            PI:   nothing
+
+loop_range(lo, hi):            dot_range(lo, hi):
+  ck = 0                         s = 0.0
+  for i in [lo, hi):             for i in [lo, hi):
+    v = loop_value(i)              s += a[i] * b[i]
+    out[i] = v                   return s
+    ck += v * (i + 1)
+  return ck                    pi_range(lo, hi):
+                                 in = 0
+                                 for i in [lo, hi):
+                                   x = U(seed, 2i); y = U(seed, 2i+1)
+                                   if x*x + y*y <= 1: in += 1
+                                 return in
+
+sequential: one call on [0, n); processed = n; workers = 1
+            PI value = 4 * inside / n
+validate(run, ref): processed == n, then
+            LOOP/PI: checksum equal;  DOT: finite and
+            |run - ref| <= 1e-6 * max(1, |ref|)
 
 --- Pseudocode For Each Scheduling Strategy ---
 
@@ -313,6 +366,8 @@ Main Notebook
 * Sofia Amador:
 
 * Zack Govin:
+11/08/2026:
+Workloads + Validation Module
 
 * Chandler Radcliffe:
 
