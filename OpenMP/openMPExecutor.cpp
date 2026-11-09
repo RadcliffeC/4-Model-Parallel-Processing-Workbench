@@ -2,8 +2,8 @@
 // Created by Lawrence O'Connor on 11/8/26.
 //
 
-#include "Seq-Thread-OMP/workload.h"
-#include "Seq-Thread-OMP/workbench.h"
+#include "workload.h"
+#include "workbench.h"
 #include <omp.h>
 #include <iostream>
 #include <algorithm>
