@@ -52,4 +52,4 @@ bool validate_visit_counts(const vector<int>& visits, string& err);
 // How many standard errors the estimate is from the real pi
 double pi_standard_errors_from_pi(double estimate, u64 n);
 
-#endif WORKLOAD_H
+#endif

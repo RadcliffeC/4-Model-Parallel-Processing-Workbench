@@ -10,6 +10,7 @@
 #include "input.h"  //input struct and parse_input()
 #include "workbench.h"  //shared structs and TODO functions
 #include "output.h" //print_status() and print single report
+#include "thread.h"
 
 using namespace std;
 
