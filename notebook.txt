@@ -372,5 +372,6 @@ Workloads + Validation Module
 * Chandler Radcliffe:
 
 * Larry OConnor:
+OpenMP workloads implementation, timer functions
 
 * Lauren Sanchez:
