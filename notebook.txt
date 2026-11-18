@@ -281,6 +281,7 @@ Main Notebook
 *************************************
 --- Meeting Notes ---
 -10/21/2026: Met and drafted Milestone 1
+-11/18/2026: Coordinated what needs to be done for Milestone 3 
 --- Design Decisions ---
 11/08/2026:
 - LOOP stores its output. setup_workload allocates data.loop_out inside
