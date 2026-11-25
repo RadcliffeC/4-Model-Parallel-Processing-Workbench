@@ -376,3 +376,5 @@ Workloads + Validation Module
 OpenMP workloads implementation, timer functions
 
 * Lauren Sanchez:
+11/20/2026
+MPI
